@@ -79,15 +79,22 @@ export default function App() {
   const [denominator, setDenominator] = useState<string>('');
 
   // Number line configuration
-  const UNIT_WIDTH = 80; // Pixels per unit
+  const UNIT_WIDTH = 50; // Pixels per unit (800/16 = 50)
   const [viewBoxX, setViewBoxX] = useState(-400);
 
-  // Update viewBox to follow the point smoothly with a slight delay
+  // Update viewBox to follow the point only when it moves near the edges
   useEffect(() => {
-    // Center the point in the 800px wide view
-    // We use a slower transition in the motion component to make it feel like a camera follow
-    setViewBoxX(currentPos * UNIT_WIDTH - 400);
-  }, [currentPos]);
+    setViewBoxX(prev => {
+      const currentMin = prev / UNIT_WIDTH;
+      const currentMax = (prev + 800) / UNIT_WIDTH;
+      const padding = 2; // Units of padding before moving camera
+      
+      if (currentPos < currentMin + padding || currentPos > currentMax - padding) {
+        return currentPos * UNIT_WIDTH - 400;
+      }
+      return prev;
+    });
+  }, [currentPos, UNIT_WIDTH]);
 
   const handleAdd = () => {
     let value = 0;
@@ -132,16 +139,21 @@ export default function App() {
   // Helper to convert number line coordinate to global X coordinate
   const getGlobalX = (val: number) => val * UNIT_WIDTH;
 
-  // Generate ticks around the current position
+  // Generate ticks based on the visible range of the viewBox
   const ticks = useMemo(() => {
     const t = [];
-    const startTick = Math.floor(currentPos - 10);
-    const endTick = Math.ceil(currentPos + 10);
+    const currentMin = Math.floor(viewBoxX / UNIT_WIDTH);
+    const currentMax = Math.ceil((viewBoxX + 800) / UNIT_WIDTH);
+    
+    // Add some padding to ensure smooth transitions
+    const startTick = currentMin - 2;
+    const endTick = currentMax + 2;
+    
     for (let i = startTick; i <= endTick; i++) {
       t.push(i);
     }
     return t;
-  }, [currentPos]);
+  }, [viewBoxX, UNIT_WIDTH]);
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans p-4 md:p-8 flex flex-col items-center">
