@@ -235,12 +235,6 @@ export default function App() {
                 stroke={t === 0 ? "#2563eb" : "#374151"} 
                 strokeWidth={t === 0 ? "5" : "3"}
               />
-              {/* Minor Ticks (0.5 intervals) */}
-              <line 
-                x1={getGlobalX(t + 0.5)} y1="72" x2={getGlobalX(t + 0.5)} y2="88" 
-                stroke="#9ca3af" 
-                strokeWidth="1.5"
-              />
               <text 
                 x={getGlobalX(t)} y="130" 
                 textAnchor="middle" 
