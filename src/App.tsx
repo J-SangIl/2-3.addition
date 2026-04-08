@@ -9,6 +9,8 @@ import { Plus, Minus, RotateCcw, ArrowRight } from 'lucide-react';
 
 // Types for our calculation history
 interface CalculationStep {
+  from: number;
+  to: number;
   value: number;
   display: string;
   type: 'positive' | 'negative';
@@ -77,6 +79,18 @@ export default function App() {
   const [decimalValue, setDecimalValue] = useState<string>('');
   const [numerator, setNumerator] = useState<string>('');
   const [denominator, setDenominator] = useState<string>('');
+  const [showInputWarning, setShowInputWarning] = useState<boolean>(false);
+
+  // Helper to handle input change and block '-'
+  const handleInputChange = (value: string, setter: (val: string) => void) => {
+    if (value.includes('-')) {
+      setShowInputWarning(true);
+      setTimeout(() => setShowInputWarning(false), 3000);
+      setter(value.replace(/-/g, ''));
+      return;
+    }
+    setter(value);
+  };
 
   // Number line configuration
   const UNIT_WIDTH = 50; // Pixels per unit (800/16 = 50)
@@ -120,8 +134,9 @@ export default function App() {
       setCurrentRational(prev => addRationals(prev, { n: isNegative ? -num : num, d: den }));
     }
 
-    setCurrentPos(prev => prev + value);
-    setHistory(prev => [...prev, { value, display, type: isNegative ? 'negative' : 'positive' }]);
+    const nextPos = currentPos + value;
+    setHistory(prev => [...prev, { from: currentPos, to: nextPos, value, display, type: isNegative ? 'negative' : 'positive' }]);
+    setCurrentPos(nextPos);
     
     // Reset inputs
     setDecimalValue('');
@@ -257,6 +272,71 @@ export default function App() {
             </g>
           ))}
 
+          {/* Movement Arcs */}
+          <AnimatePresence>
+            {history.map((step, index) => {
+              const x1 = getGlobalX(step.from);
+              const x2 = getGlobalX(step.to);
+              const distance = Math.abs(x2 - x1);
+              const height = Math.min(60, distance / 2 + 20);
+              const midX = (x1 + x2) / 2;
+              const isPositive = step.to > step.from;
+              
+              // SVG path for a quadratic bezier curve (arc)
+              // M x1,80 Q midX,80-height x2,80
+              const pathData = `M ${x1} 80 Q ${midX} ${80 - height} ${x2} 80`;
+              
+              return (
+                <motion.g 
+                  key={`arc-${index}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <path 
+                    d={pathData} 
+                    fill="none" 
+                    stroke={step.type === 'positive' ? "#2563eb" : "#dc2626"} 
+                    strokeWidth="3" 
+                    strokeDasharray="5,5"
+                  />
+                  {/* Arrow head */}
+                  <motion.path 
+                    d={isPositive ? "M -8,-5 L 0,0 L -8,5" : "M 8,-5 L 0,0 L 8,5"}
+                    fill="none"
+                    stroke={step.type === 'positive' ? "#2563eb" : "#dc2626"}
+                    strokeWidth="3"
+                    transform={`translate(${x2}, 80)`}
+                  />
+                  {/* Arc Label */}
+                  <g transform={`translate(${midX}, ${80 - height - 15})`}>
+                    <rect 
+                      x="-25" y="-12" width="50" height="24" rx="4" 
+                      fill={step.type === 'positive' ? "#dbeafe" : "#fee2e2"} 
+                      stroke={step.type === 'positive' ? "#2563eb" : "#dc2626"}
+                      strokeWidth="1"
+                    />
+                    <foreignObject x="-25" y="-12" width="50" height="24">
+                      <div className={`w-full h-full flex items-center justify-center text-[10px] font-bold ${step.type === 'positive' ? 'text-blue-700' : 'text-red-700'}`}>
+                        {step.display.includes('\\frac') ? (
+                          <div className="flex items-center gap-0.5 scale-90">
+                            <span>{step.display.startsWith('-') ? '-' : '+'}</span>
+                            <div className="flex flex-col items-center leading-none">
+                              <span className="border-b border-current px-0.5">{step.display.match(/\{(\d+)\}/g)?.[0].replace(/[{}]/g, '')}</span>
+                              <span>{step.display.match(/\{(\d+)\}/g)?.[1].replace(/[{}]/g, '')}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <span>{step.display}</span>
+                        )}
+                      </div>
+                    </foreignObject>
+                  </g>
+                </motion.g>
+              );
+            })}
+          </AnimatePresence>
+
           {/* Current Point - Clear Marker with Slower Animation */}
           <motion.g
             initial={false}
@@ -329,20 +409,52 @@ export default function App() {
               </span>
               
               {inputMode === 'decimal' ? (
-                <input 
-                  type="number" 
-                  step="any"
-                  value={decimalValue}
-                  onChange={(e) => setDecimalValue(e.target.value)}
-                  placeholder="숫자"
-                  className="w-full bg-transparent text-lg font-black outline-none placeholder:text-gray-300 text-gray-900"
-                />
+                <div className="relative flex-1">
+                  <input 
+                    type="number" 
+                    step="any"
+                    value={decimalValue}
+                    onChange={(e) => handleInputChange(e.target.value, setDecimalValue)}
+                    onKeyDown={(e) => {
+                      if (e.key === '-') {
+                        e.preventDefault();
+                        setShowInputWarning(true);
+                        setTimeout(() => setShowInputWarning(false), 3000);
+                      }
+                    }}
+                    placeholder="숫자"
+                    className="w-full bg-transparent text-lg font-black outline-none placeholder:text-gray-300 text-gray-900"
+                  />
+                  <AnimatePresence>
+                    {showInputWarning && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute left-0 -top-12 bg-gray-800 text-white text-[10px] py-1.5 px-3 rounded-lg shadow-xl z-50 whitespace-nowrap"
+                      >
+                        <div className="flex flex-col">
+                          <span>'-'는 입력할 수 없습니다.</span>
+                          <span className="text-yellow-400 font-bold">음수를 입력하려면 왼쪽의 [-] 버튼을 누르세요.</span>
+                        </div>
+                        <div className="absolute -bottom-1 left-4 w-2 h-2 bg-gray-800 rotate-45" />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               ) : (
-                <div className="flex-1 flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 relative">
                   <input 
                     type="number" 
                     value={numerator}
-                    onChange={(e) => setNumerator(e.target.value)}
+                    onChange={(e) => handleInputChange(e.target.value, setNumerator)}
+                    onKeyDown={(e) => {
+                      if (e.key === '-') {
+                        e.preventDefault();
+                        setShowInputWarning(true);
+                        setTimeout(() => setShowInputWarning(false), 3000);
+                      }
+                    }}
                     placeholder="분자"
                     className="w-14 bg-transparent text-center text-base font-black outline-none border-b-2 border-gray-300"
                   />
@@ -350,10 +462,33 @@ export default function App() {
                   <input 
                     type="number" 
                     value={denominator}
-                    onChange={(e) => setDenominator(e.target.value)}
+                    onChange={(e) => handleInputChange(e.target.value, setDenominator)}
+                    onKeyDown={(e) => {
+                      if (e.key === '-') {
+                        e.preventDefault();
+                        setShowInputWarning(true);
+                        setTimeout(() => setShowInputWarning(false), 3000);
+                      }
+                    }}
                     placeholder="분모"
                     className="w-14 bg-transparent text-center text-base font-black outline-none border-b-2 border-gray-300"
                   />
+                  <AnimatePresence>
+                    {showInputWarning && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute left-0 -top-12 bg-gray-800 text-white text-[10px] py-1.5 px-3 rounded-lg shadow-xl z-50 whitespace-nowrap"
+                      >
+                        <div className="flex flex-col">
+                          <span>'-'는 입력할 수 없습니다.</span>
+                          <span className="text-yellow-400 font-bold">음수를 입력하려면 왼쪽의 [-] 버튼을 누르세요.</span>
+                        </div>
+                        <div className="absolute -bottom-1 left-4 w-2 h-2 bg-gray-800 rotate-45" />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               )}
             </div>
